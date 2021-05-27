@@ -1,7 +1,5 @@
-library(readr)
 library(tidyverse)
 library(lubridate)
-
 
 ventas <- read_csv("sales_data_sample.csv")
 
