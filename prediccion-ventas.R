@@ -1,6 +1,8 @@
+library(MASS)
 library(tidyverse)
 library(lubridate)
 library(broom)
+
 options(scipen=999) #forzar R a no utilizar notación exponencial para números grandes
 
 load("ventas.rda")
@@ -9,8 +11,9 @@ load("ventas.rda")
 ventas %>%
   group_by(orderdate) %>%
   summarise(sales = sum(sales)) %>%
-  ggplot(aes(orderdate, sales)) + geom_point()
+  ggplot(aes(orderdate, sales)) + geom_point(alpha = 0.5)
 
+#el agregado por día no nos permite reconocer un patrón para plantear un modelo
 
 #agregar datos de ventas por mes
 ventas_por_mes <- ventas %>%
@@ -23,11 +26,11 @@ ventas_por_mes <- ventas %>%
   
 #gráfico de ventas por mes 
 ventas_por_mes %>%
-    ggplot(aes(ordermonth, sales)) + geom_point() + geom_smooth(method = "lm")
+    ggplot(aes(ordermonth, sales)) + geom_point()
 
+#esta gráfica sugiere plantear un modelo lineal
 #podemos ver que en noviembre las ventas totales son mucho mayores que en los demás meses del año, así que
-#es mejor manejar esos puntos por aparte para la regresión, ya que se comportan muy diferente a los 
-#demás y resultarían en una predicción menos precisa
+#utilizaremos un método de regresión robusta
 
 #boxplot de ventas mensuales en los años 2003 y 2004
 ventas_por_mes %>%
@@ -37,18 +40,18 @@ ventas_por_mes %>%
   scale_y_log10() + geom_point(alpha = 0.5)
 
 
-#gráfico de ventas por mes sin noviembre con modelo lineal e intervalos de confianza del 95%
-ventas_por_mes %>%
-  filter(month(ordermonth) != 11) %>%
-  ggplot(aes(ordermonth, sales)) + geom_point() + geom_smooth(method = "lm")
 
-#modelo lineal de ventas por mes sin noviembre
+
+#gráfico de ventas por mes con modelo lineal e intervalos de confianza del 95%
+ventas_por_mes %>%
+  ggplot(aes(ordermonth, sales)) + geom_point(data = ventas_por_mes) + geom_smooth(method = "rlm")
+
+#modelo lineal de ventas por mes
 fit <- ventas_por_mes %>%
-  filter(month(ordermonth) != 11) %>%
-  lm(sales ~ ordermonth, data = .) 
+  rlm(sales ~ ordermonth, data = .) 
   
-#predicción de ventas por mes, de junio de 2005 hasta diciembre de 2005, ignorando noviembre
-meses_prediccion <- c(seq(ymd("2005-06-01"), ymd("2005-10-01"), by = "months"), ymd("2005-12-01"))
+#predicción de ventas por mes, de junio de 2005 hasta diciembre de 2005
+meses_prediccion <- seq(ymd("2005-06-01"), ymd("2005-12-01"), by = "months")
 meses_prediccion <- as_tibble_col(meses_prediccion, column_name = "ordermonth")
 
 prediccion <- predict(fit, newdata = meses_prediccion, interval = "confidence")
@@ -61,10 +64,20 @@ prediccion %>%
 
 #gráfico de las predicciones junto con los datos 
 ventas_por_mes %>%
-  filter(month(ordermonth) != 11) %>%
-    ggplot(aes(ordermonth, sales)) + geom_point() + geom_smooth(method = "lm") + 
+    ggplot(aes(ordermonth, sales)) + geom_point() + geom_smooth(method = "rlm") + 
     geom_point(data = prediccion, aes(ordermonth, fit), size = 2) +
     geom_errorbar(data = prediccion, aes(ordermonth, fit, ymin = lwr, ymax = upr))
+
+
+
+
+
+
+
+
+
+
+
 
 
 
