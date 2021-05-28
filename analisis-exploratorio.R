@@ -41,7 +41,11 @@ ventas %>% group_by(productline) %>%
 #gráfico de barras de ventas totales por línea de producto
 ventas %>% group_by(productline) %>%
   summarise(sales = sum(sales)) %>%
-  ggplot(aes(productline, sales)) + geom_col() + ylab("Ventas") + xlab('Línea')
+  ggplot(aes(productline, sales, fill = productline)) + geom_col() + ylab("Ventas") + xlab('Línea') +
+  theme(legend.position = "none")
+
+
+#para cada caso, vemos que hacer el análisis con ventas totales o número de órdenes aporta la misma información
 
 
 
@@ -52,7 +56,7 @@ ventas %>%
 
 #segunda opción estado de envíos por territorio
 ventas %>% 
-  ggplot(aes(status, fill = territory)) + geom_bar() + scale_y_log10()
+  ggplot(aes(status, fill = territory)) + geom_bar() + scale_y_log10() 
 
 #estado de los envíos por línea de producto
 ventas %>%

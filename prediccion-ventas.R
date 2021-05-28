@@ -39,7 +39,8 @@ ventas_por_mes %>%
   ggplot(aes(year, sales, fill = year)) + geom_boxplot() + theme(legend.position = "none") + 
   scale_y_log10() + geom_point(alpha = 0.5)
 
-
+#este boxplot nos permite observar la distribución de las ventas mensuales para cada año
+#el puntó más alto de cada distribución corresponde al mes de noviembre
 
 
 #gráfico de ventas por mes con modelo lineal e intervalos de confianza del 95%
@@ -69,14 +70,14 @@ ventas_por_mes %>%
     geom_errorbar(data = prediccion, aes(ordermonth, fit, ymin = lwr, ymax = upr))
 
 
+#error promedio del mes de noviembre
 
+prediccion_2 <- predict(fit)
+prediccion_2 <- as_tibble(prediccion_2)
+prediccion_2 <- bind_cols(ventas_por_mes, prediccion_2)
 
-
-
-
-
-
-
+prediccion_2 %>% filter(ordermonth == ymd("2003-11-01") | ordermonth == ymd("2004-11-01")) %>%
+  summarise(mean_error = mean(c(sales[1] - value[1], sales[2] - value[2])))
 
 
 

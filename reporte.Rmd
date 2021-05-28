@@ -1,0 +1,140 @@
+---
+title: "Reporte de Ventas"
+author: "Andrés Franco Grisales"
+date: "5/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include=FALSE}
+library(MASS)
+library(tidyverse)
+library(lubridate)
+library(broom)
+options(scipen=999)
+load("ventas.rda")
+```
+
+
+En este reporte se analizan datos de ventas de la empresa, desde enero de 2003 hasta mayo de 2005.
+
+## Análisis Exploratorio
+
+A continuación, podemos ver una gráfica de las ventas totales por país.
+
+```{r}
+ventas %>% group_by(country) %>%
+  summarise(orders = n(), sales = sum(sales)) %>%
+  mutate(country = reorder(country, sales)) %>%
+    ggplot(aes(country, sales)) + geom_col() + ylab("Ventas totales") + xlab('País') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+La gráfica hace evidente que el país que genera más ventas totales, por un amplio margen, es Estados Unidos. Seguido de España y Francia, que generan ventas totales considerablemente mayores a las de los demás paises.
+
+Vale la pena también observar las ventas totales por territorio.
+
+```{r}
+ventas %>% group_by(territory) %>%
+  summarise(orders = n(), sales = sum(sales)) %>%
+  mutate(territory = reorder(territory, sales)) %>%
+    ggplot(aes(territory, sales, fill = territory)) + geom_col() + ylab("Ventas") + 
+    xlab('Territorio') + theme(legend.position = "none")
+```
+
+Ya que solo se tienen ventas en la región EMEA para paises europeos, vemos que, a pesar de que Estados Unidos es el país que genera más ventas, tenemos que Europa genera más ventas que Norte América.
+
+Ahora pasamos a observar las ventas totales por línea de producto.
+
+```{r}
+ventas %>% group_by(productline) %>%
+  summarise(sales = sum(sales)) %>%
+  ggplot(aes(productline, sales, fill = productline)) + geom_col() + ylab("Ventas") + xlab('Línea') +
+  theme(legend.position = "none")
+```
+
+Y observamos que la línea con más ventas, con una gran ventaja, es la de carros clásicos. Cabe destacar que la línea de trenes genera ventas mucho menores que todas las demás líneas.
+
+Finalmente estudiamos la distribución del estado de los envíos, segmentado por territorio.
+
+```{r}
+ventas %>% 
+  ggplot(aes(status, fill = territory)) + geom_bar() + scale_y_log10() + xlab("Estado") + ylab("Total") +
+  labs(fill = "Territorio")
+```
+
+Notamos que la gran mayoría de las órdenes fueron enviadas. Se destaca que órdenes con estado de cancelado, en espera y resuelto, solo se presentan en Norte América y Europa; y que órdenes con estado de disputado, solo se presentan en Europa y Asia-Pacífico. También observamos que la región de Japón es la única donde todas las órdenes tienen estado de enviado 
+
+
+## Predicción de Ventas
+
+Comenzamos agregando las ventas totales por día.
+
+```{r}
+ventas %>%
+  group_by(orderdate) %>%
+  summarise(sales = sum(sales)) %>%
+  ggplot(aes(orderdate, sales)) + geom_point(alpha = 0.5) + xlab("Día") + ylab("Ventas")
+```
+
+Esta gráfica no nos permite reconocer un patrón para plantear un modelo. Ahora procedemos a agregar las ventas totales por mes.
+
+```{r}
+ventas_por_mes <- ventas %>%
+  mutate(aux_day = "01") %>%
+  unite(ordermonth, year_id, month_id, aux_day, sep = "-") %>%
+  mutate(ordermonth = ymd(ordermonth)) %>% 
+  group_by(ordermonth) %>%
+  summarise(sales = sum(sales)) 
+
+ventas_por_mes %>%
+    ggplot(aes(ordermonth, sales)) + geom_point() + xlab("Mes") + ylab("Ventas")
+```
+
+Observamos dos hechos importantes. Primero, que las ventas totales mensuales tienden a crecer de manera aproximadamente lineal, lo cual nos motiva a plantear un modelo lineal. Segundo, que los datos presentan dos meses en los cuales las ventas totales son considerablemente mayores que las de los demás meses. Estos dos meses corresponden a noviembre de cada año. Este hecho nos lleva a utilizar un modelo de regresión robusta, que no se verá muy afectado por el comportamiento notablemente diferente de los meses de noviembre.
+
+```{r}
+fit <- ventas_por_mes %>%
+  rlm(sales ~ ordermonth, data = .) 
+```
+
+El modelo permite realizar las siguientes predicciones para las ventas totales mensuales desde junio hasta diciembre de 2005. Cada predicción se presenta con un intervalo de confianza del 95%.
+
+```{r}
+meses_prediccion <- seq(ymd("2005-06-01"), ymd("2005-12-01"), by = "months")
+meses_prediccion <- as_tibble_col(meses_prediccion, column_name = "ordermonth")
+
+prediccion <- predict(fit, newdata = meses_prediccion, interval = "confidence")
+prediccion <- as_tibble(prediccion)
+prediccion <- bind_cols(meses_prediccion, prediccion)
+
+prediccion_print <- prediccion
+names(prediccion_print) <- c("Mes", "Predicción", "Inferior", "Superior")
+prediccion_print %>% mutate(Mes = month(Mes, label = TRUE)) %>% print()
+```
+
+También podemos observar las predicciones gráficamente, incluyendo los intervalos de confianza.
+
+```{r}
+prediccion %>%
+  ggplot(aes(ordermonth, fit, ymin = lwr, ymax = upr)) + geom_point(size = 2) + geom_errorbar() +
+  xlab("Mes") + ylab("Ventas")
+```
+
+Y comparar los datos con el modelo y las predicciones.
+
+```{r, message=FALSE}
+ventas_por_mes %>%
+    ggplot(aes(ordermonth, sales)) + geom_point() + geom_smooth(method = "rlm") + 
+    geom_point(data = prediccion, aes(ordermonth, fit), size = 2) +
+    geom_errorbar(data = prediccion, aes(ordermonth, fit, ymin = lwr, ymax = upr)) + 
+    xlab("Mes") + ylab("Ventas")
+```
+
+Finalmente notamos que, debido a los datos de los meses de noviembre, se espera que el valor de las ventas totales del mes de noviembre de 2005 sean mucho mayores que las que predice el modelo. El error promedio de las ventas del mes de noviembre es de 754284, así que se esperaría que el verdadero valor de las ventas de noviembre de 2005 se encuentre alrededor de 1226461. 
+
+
+
